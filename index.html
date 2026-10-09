@@ -12,7 +12,28 @@ const questions=[{"id":1,"clue":"An astronaut loses contact with Earth while flo
 let deck=[],index=0,score=0,answered=false,streak=0,bestStreak=0;
 const el=id=>document.getElementById(id);
 function shuffle(a){let b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
-function start(){deck=shuffle(questions.filter(q=>q.difficulty==="easy")).slice(0,8).concat(shuffle(questions.filter(q=>q.difficulty==="medium")).slice(0,2));deck=shuffle(deck);index=0;score=0;streak=0;bestStreak=0;el("intro").classList.add("hidden");el("finish").classList.add("hidden");el("game").classList.remove("hidden");render()}
+const HISTORY_KEY="nts-recent-song-ids-v1";
+let recentIds=[];
+try{const saved=JSON.parse(localStorage.getItem(HISTORY_KEY)||"[]");if(Array.isArray(saved))recentIds=saved.filter(id=>Number.isInteger(id)).slice(-100)}catch(e){}
+function buildRound(){
+ const selected=[],usedArtists=new Set(),usedSongs=new Set();
+ const recent=new Set(recentIds);
+ function pick(level,count){
+  for(let n=0;n<count;n++){
+   const candidates=questions.filter(q=>q.difficulty===level&&!usedSongs.has(q.id));
+   if(!candidates.length)break;
+   const fresh=candidates.filter(q=>!recent.has(q.id));
+   const pool=fresh.length?fresh:candidates;
+   const varied=pool.filter(q=>!usedArtists.has(q.artist.trim().toLowerCase()));
+   const choice=shuffle(varied.length?varied:pool)[0];
+   selected.push(choice);usedSongs.add(choice.id);usedArtists.add(choice.artist.trim().toLowerCase());
+  }
+ }
+ pick("easy",8);pick("medium",2);
+ if(selected.length<10){for(const q of shuffle(questions)){if(selected.length===10)break;if(!usedSongs.has(q.id)){selected.push(q);usedSongs.add(q.id)}}}
+ return shuffle(selected);
+}
+function start(){deck=buildRound();recentIds=recentIds.concat(deck.map(q=>q.id)).slice(-100);try{localStorage.setItem(HISTORY_KEY,JSON.stringify(recentIds))}catch(e){};index=0;score=0;streak=0;bestStreak=0;el("intro").classList.add("hidden");el("finish").classList.add("hidden");el("game").classList.remove("hidden");render()}
 function render(){answered=false;const q=deck[index];el("round").textContent="ROUND "+(index+1)+" / "+deck.length;el("counter").textContent="SONG "+(index+1)+" OF "+deck.length+" · "+score+" correct";el("streak").textContent=streak>=2?"★ "+streak+" correct in a row!":"";el("bar").style.width=((index)/deck.length*100)+"%";el("clue").textContent=q.clue;el("feedback").textContent="";el("next").classList.add("hidden");const a=el("answers");a.replaceChildren();shuffle(q.options).forEach(opt=>{const b=document.createElement("button");b.textContent=opt;b.addEventListener("click",()=>choose(opt));a.append(b)})}
 function choose(opt){if(answered)return;answered=true;const q=deck[index];const correct=opt===q.answer;if(correct){score++;streak++;bestStreak=Math.max(bestStreak,streak)}else streak=0;for(const b of el("answers").children){b.disabled=true;if(b.textContent===q.answer)b.classList.add("correct");else if(b.textContent===opt)b.classList.add("wrong")}el("feedback").textContent=(correct?"✓ That's right! ":"Not quite. ")+q.answer+" — "+q.artist;el("next").classList.remove("hidden");el("next").textContent=index===deck.length-1?"SEE MY SCORE →":"NEXT SONG →"}
 function next(){if(++index<deck.length)render();else{el("game").classList.add("hidden");el("finish").classList.remove("hidden");el("round").textContent="FINISHED";el("finalScore").textContent=score+" / "+deck.length;el("finalMessage").textContent=score===10?"Perfect round!":score>=8?"Brilliant! You know your music.":score>=5?"Nice work! Keep going.":"You finished the round — keep discovering!";el("stats").textContent=Math.round(score/deck.length*100)+"% correct · Best streak: "+bestStreak}}
